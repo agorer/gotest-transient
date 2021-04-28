@@ -10,39 +10,22 @@
   :value '("")
   ["Options"
    [("-v" "verbose" "-v")
+    ("-nc" "no cache" "-count=1")
     (gotest-transient:-t)
     ("-f" "fail fast" "-failfast")]]
   ["Run tests"
-   [("p" "all project" gotest-transient-run-project)]
-   [("f" "current file" gotest-transient-run-file)]
-   [("tt" "current test" gotest-transient-run-test)]
-   [("tr" "current test run" gotest-transient-run-test-run)]])
+   [("p" "all project" gotest-transient--run-project)]
+   [("f" "current file" gotest-transient--run-file)]
+   [("tt" "current test" gotest-transient--run-test)]
+   [("tr" "current subtest" gotest-transient--run-subtest)]])
 
-(defun gotest-transient-run-project (&optional args)
+(defun gotest-transient--run-project (&optional args)
   "Run all tests for the current project."
   (interactive (list (transient-args 'gotest-transient-dispatch)))
   (transient-save)
   (let ((project-root (gotest-transient--get-project-root))
         (cmd-args (append args '("./..."))))
     (gotest-transient--run-tests project-root cmd-args)))
-
-(defun gotest-transient-run-test (file function &optional args)
-  "Run current test"
-  (interactive
-   (list
-    (buffer-file-name)
-    (transient-args 'gotest-transient-dispatch)))
-  (message "Running current test.")
-  (transient-save))
-
-(defun gotest-transient-run-test-run (file function &optional args)
-  "Run current test"
-  (interactive
-   (list
-    (buffer-file-name)
-    (transient-args 'gotest-transient-dispatch)))
-  (message "Running current test.")
-  (transient-save))
 
 (defun gotest-transient--read-quoted-argument-for-short-flag (prompt initial-input history)
   "Read a quoted string for use as a argument after a short-form command line flag."
@@ -175,7 +158,7 @@
     )
   "Minimal highlighting expressions for go test results.")
 
-(defun gotest-transient-run-file (&optional args)
+(defun gotest-transient--run-file (&optional args)
   "Run all tests for the current file."
   (interactive
    (list
@@ -209,7 +192,38 @@
     (let ((ff-always-try-to-create nil)
 	  (filename (ff-other-file-name)))
       (when filename
-	(find-file-noselect filename)))))
-    
+	    (find-file-noselect filename)))))
+
+(defun gotest-transient--run-test (&optional args)
+  "Run current test"
+  (interactive
+   (list
+    (transient-args 'gotest-transient-dispatch)))
+  (transient-save)
+  (let* ((project-root (gotest-transient--get-project-root))
+         (test-name (gotest-transient--get-current-test))
+         (cmd-args (append args '("-run") `(,test-name) '("./..."))))
+    (message test-name)
+    (gotest-transient--run-tests project-root cmd-args)))
+
+(defun gotest-transient--get-current-test ()
+  "Get the name of the test the cursor is on"
+  (let ((buffer (gotest-transient--get-test-buffer))
+        (test-function-regex "func[[:space:]]*\\(Test[^(]+\\)"))
+    (with-current-buffer buffer
+      (save-excursion
+        (end-of-line)
+        (if (search-backward-regexp test-function-regex nil t)
+            (match-string-no-properties 1)
+          (error "Unable to find a test"))))))
+
+(defun gotest-transient--run-subtest (file function &optional args)
+  "Run current subtest"
+  (interactive
+   (list
+    (buffer-file-name)
+    (transient-args 'gotest-transient-dispatch)))
+  (message "Running current test.")
+  (transient-save))
 
 (provide 'gotest-transient)
