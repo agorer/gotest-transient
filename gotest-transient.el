@@ -52,14 +52,14 @@
   (let ((cmdline (append '("go" "test") cmd-args)))
     (setq gotest-transient--results-buffer (get-buffer-create "*Go test*"))
     (display-buffer gotest-transient--results-buffer)
+    (setq gotest-transient--previous-cmd-args cmd-args)
 
     (with-current-buffer gotest-transient--results-buffer
-      (let ((buffer-read-only))
+      (let ((buffer-read-only nil))
         (erase-buffer))
       (buffer-disable-undo)
       (gotest-mode)
       (let ((default-directory project-root))
-        ;; FIXME: [JUANJO] aqui deberiamos crear un modo para el
         (setq gotest-transient--stderr-buffer (generate-new-buffer "*Go test tmp (stderr)*"))
         (setq gotest-transient--stderr-process
               (make-pipe-process :name "*Go test (stderr)*"
@@ -227,7 +227,6 @@
          (subtest-name (gotest-transient--get-current-subtest test-name))
          (full-name (concat test-name "/" subtest-name))
          (cmd-args (append args '("-run") `(,full-name) '("./..."))))
-    (message "%s" cmd-args)
     (gotest-transient--run-tests project-root cmd-args)))
   
 (defun gotest-transient--get-current-subtest (test-name)
@@ -240,5 +239,16 @@
         (if (search-backward-regexp subtest-regex nil t)
             (s-replace " " "_" (match-string-no-properties 1))
           (error "Unable to find a subtest"))))))
+
+(setq gotest-transient--previous-cmd-args nil)
+(defun gotest-transient-run-previous-command ()
+  "Run the last command executed if any."
+  (interactive)
+  
+  (message "Running command: go test %s" (s-join " " gotest-transient--previous-cmd-args))
+  (let ((project-root (gotest-transient--get-project-root)))
+    (if (bound-and-true-p gotest-transient--previous-cmd-args)
+        (gotest-transient--run-tests project-root gotest-transient--previous-cmd-args)
+      (message "No tests were run previously"))))
   
 (provide 'gotest-transient)
