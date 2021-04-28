@@ -26,16 +26,6 @@
         (cmd-args (append args '("./..."))))
     (gotest-transient--run-tests project-root cmd-args)))
 
-(defun gotest-transient-run-file (file &optional args)
-  "Run all tests for the current file."
-  (interactive
-   (list
-    (buffer-file-name) ;; FIXME: [JUANJO] check if ends in _test.go
-    (transient-args 'gotest-transient-dispatch)))
-  (message "Running all the file tests.")
-  (transient-save)
-  (message file))
-
 (defun gotest-transient-run-test (file function &optional args)
   "Run current test"
   (interactive
@@ -77,7 +67,7 @@
 (defun gotest-transient--run-tests (project-root cmd-args)
   "Run the command line with CMDARGS and show results on buffer."
   (let ((cmdline (append '("go" "test") cmd-args)))
-    (setq gotest-transient--results-buffer (get-buffer-create "*Go test results*"))
+    (setq gotest-transient--results-buffer (get-buffer-create "*Go test*"))
     (display-buffer gotest-transient--results-buffer)
 
     (with-current-buffer gotest-transient--results-buffer
@@ -89,14 +79,14 @@
         ;; FIXME: [JUANJO] aqui deberiamos crear un modo para el
         (setq gotest-transient--stderr-buffer (generate-new-buffer "*Go test tmp (stderr)*"))
         (setq gotest-transient--stderr-process
-              (make-pipe-process :name "*Go test results (stderr)*"
+              (make-pipe-process :name "*Go test (stderr)*"
                                  :buffer gotest-transient--stderr-buffer
                                  :sentinel #'gotest-transient--stderr-sentinel
                                  :filter #'gotest-transient--read-stderr))
 
         (setq gotest-transient--process-buffer (generate-new-buffer "*Go test tmp*"))
         (setq gotest-transient--process
-              (make-process :name "*Go test results*"
+              (make-process :name "*Go test (stdout)*"
                             :buffer gotest-transient--process-buffer
                             :sentinel #'gotest-transient--process-sentinel
                             :filter #'gotest-transient--read-stdout
@@ -145,7 +135,7 @@
         (let ((buffer-read-only nil))
           (insert input))))))
 
-(define-derived-mode gotest-mode special-mode "Go test"
+(define-derived-mode gotest-mode special-mode "gotest-mode"
   "Major mode for running go tests."
   (use-local-map gotest-transient-mode-map)
   (font-lock-add-keywords nil gotest-font-lock-keywords)
@@ -153,7 +143,7 @@
   (setq buffer-read-only t)
   (setq-local line-move-visual t)
   (setq show-trailing-whitespace nil)
-  (setq list-buffers-directory "*Go test results*")
+  (setq list-buffers-directory "*Go test*")
   (make-local-variable 'text-property-default-nonsticky)
   (push (cons 'keymap t) text-property-default-nonsticky))
 
@@ -176,7 +166,7 @@
 (defconst gotest-font-lock-keywords
   '(("error\\:" . 'gotest--fail-face)
     ("^\s*FATAL.*" . 'gotest--fail-face)
-    ("^\s*FAIL.*" . 'go-test--fail-face)
+    ("^\s*FAIL.*" . 'gotest--fail-face)
     ("^\s*--- FATAL.*" . 'gotest--fail-face)
     ("^\s*--- FAIL:.*" . 'gotest--fail-face)
     ("^\s*--- PASS.*" . 'gotest--pass-face)
@@ -184,5 +174,42 @@
     ("^\s*ok.*" . 'gotest--pass-face)
     )
   "Minimal highlighting expressions for go test results.")
+
+(defun gotest-transient-run-file (&optional args)
+  "Run all tests for the current file."
+  (interactive
+   (list
+    (transient-args 'gotest-transient-dispatch)))
+  (transient-save)
+  (let* ((project-root (gotest-transient--get-project-root))
+         (file-tests (gotest-transient--get-current-file-tests))
+         (cmd-args (append args '("-run") `(,file-tests) '("./..."))))
+    (gotest-transient--run-tests project-root cmd-args)))
+
+(defun gotest-transient--get-current-file-tests ()
+  "Get tests that should be run for the current file."
+  (let ((buffer (gotest-transient--get-test-buffer)))
+    (when buffer
+      (with-current-buffer buffer
+	    (save-excursion
+	      (goto-char (point-min))
+	      (when (string-match "\.go$" buffer-file-name)
+            (let ((regex "^[[:space:]]*func[[:space:]]*\\(Test[^(]+\\)")
+                  result)
+	          (while (re-search-forward regex nil t)
+		        (let ((data (buffer-substring-no-properties
+                             (match-beginning 1) (match-end 1))))
+                  (setq result (append result (list data)))))
+	          (mapconcat 'identity result "|"))))))))
+
+(defun gotest-transient--get-test-buffer ()
+  "Get the test buffer for the FILE."
+  (if (string-match "_test\.go$" buffer-file-name)
+      (current-buffer)
+    (let ((ff-always-try-to-create nil)
+	  (filename (ff-other-file-name)))
+      (when filename
+	(find-file-noselect filename)))))
+    
 
 (provide 'gotest-transient)
