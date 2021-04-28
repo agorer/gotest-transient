@@ -203,7 +203,6 @@
   (let* ((project-root (gotest-transient--get-project-root))
          (test-name (gotest-transient--get-current-test))
          (cmd-args (append args '("-run") `(,test-name) '("./..."))))
-    (message test-name)
     (gotest-transient--run-tests project-root cmd-args)))
 
 (defun gotest-transient--get-current-test ()
@@ -217,13 +216,29 @@
             (match-string-no-properties 1)
           (error "Unable to find a test"))))))
 
-(defun gotest-transient--run-subtest (file function &optional args)
+(defun gotest-transient--run-subtest (&optional args)
   "Run current subtest"
   (interactive
    (list
-    (buffer-file-name)
     (transient-args 'gotest-transient-dispatch)))
-  (message "Running current test.")
-  (transient-save))
-
+  (transient-save)
+  (let* ((project-root (gotest-transient--get-project-root))
+         (test-name (gotest-transient--get-current-test))
+         (subtest-name (gotest-transient--get-current-subtest test-name))
+         (full-name (concat test-name "/" subtest-name))
+         (cmd-args (append args '("-run") `(,full-name) '("./..."))))
+    (message "%s" cmd-args)
+    (gotest-transient--run-tests project-root cmd-args)))
+  
+(defun gotest-transient--get-current-subtest (test-name)
+  "Get the name of the subtest the cursor is on."
+  (let ((buffer (gotest-transient--get-test-buffer))
+        (subtest-regex "t.Run(\"\\([^\"]+\\)"))
+    (with-current-buffer buffer
+      (save-excursion
+        (end-of-line)
+        (if (search-backward-regexp subtest-regex nil t)
+            (s-replace " " "_" (match-string-no-properties 1))
+          (error "Unable to find a subtest"))))))
+  
 (provide 'gotest-transient)
