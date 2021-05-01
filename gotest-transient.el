@@ -5,6 +5,15 @@
   :group 'go
   :prefix "gotest-transient-")
 
+(cl-defstruct (gotest-transient--node (:constructor gotest-transient--node-create))
+  package
+  test
+  subtest
+  output
+  status
+  elapsed
+  expanded)
+
 (define-transient-command gotest-transient-dispatch ()
   "Show popup for running go tests."
   :value '("")
@@ -241,14 +250,18 @@
     (setf (gotest-transient--node-expanded node-data) (not expanded))
     (ewoc-invalidate gotest-transient--results-ewoc node)))
 
-(cl-defstruct (gotest-transient--node (:constructor gotest-transient--node-create))
-  package
-  test
-  subtest
-  status
-  elapsed
-  output
-  expanded)
+(defun gotest-transient--goto-next-error ()
+  (interactive)
+  (let ((current-node (ewoc-locate gotest-transient--results-ewoc)))
+    (when current-node
+      (setq current-node (ewoc-next gotest-transient--results-ewoc current-node)))
+
+    (while (when (not (equal current-node nil))
+             (not (equal (gotest-transient--node-status (ewoc-data current-node)) "fail")))
+      (setq current-node (ewoc-next gotest-transient--results-ewoc current-node)))
+
+    (when current-node
+      (ewoc-goto-node gotest-transient--results-ewoc current-node))))
 
 (defun gotest-transient--pp-node (node)
   (if (gotest-transient--node-subtest node)
@@ -314,6 +327,7 @@
     (define-key m (kbd "k") 'kill-buffer)
     (define-key m (kbd "q") 'quit-window)
     (define-key m (kbd "TAB") 'gotest-transient--toggle-node)
+    (define-key m [(f2)] 'gotest-transient--goto-next-error)
     m))
 
 (defface gotest--pass-face '((t :foreground "green"))
