@@ -266,7 +266,7 @@
     (gotest-transient--pp-output node)))
         
 (defun gotest-transient--pp-subtest (node)
-  (gotest-transient--insert-indexed (upcase (gotest-transient--node-status node)) 1)
+  (gotest-transient--insert-indented (upcase (gotest-transient--node-status node)) 1)
   (insert " - ")
   (insert (gotest-transient--node-package node))
   (insert " - ")
@@ -280,15 +280,17 @@
 (defun gotest-transient--pp-output (node)
   (let* ((output-lines (gotest-transient--node-output node))
          (filtered-lines (seq-filter 'gotest-transient--is-not-redundant output-lines)))
-    (dolist (output-line filtered-lines)
-      (gotest-transient--insert-indexed output-line 2))))
+    (if filtered-lines
+        (dolist (output-line filtered-lines)
+          (gotest-transient--insert-indented output-line 2))
+      (gotest-transient--insert-indented "*** no output ***\n" 2))))
 
 (defun gotest-transient--is-not-redundant (line)
   (not (or (string-match-p "--- PASS" line)
            (string-match-p "--- FAIL" line)
            (string-match-p "=== RUN" line))))
 
-(defun gotest-transient--insert-indexed (text number-of-tabs)
+(defun gotest-transient--insert-indented (text number-of-tabs)
   (dotimes (i number-of-tabs)
     (insert "\t"))
   (insert text))
