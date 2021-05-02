@@ -273,8 +273,6 @@
 (defun gotest-transient--pp-test (node)
   (insert (upcase (gotest-transient--node-status node)))
   (insert " - ")
-  (insert (gotest-transient--node-package node))
-  (insert " - ")
   (insert (gotest-transient--node-test node))
   (insert "\n")
   (when (gotest-transient--node-expanded node)
@@ -282,8 +280,6 @@
         
 (defun gotest-transient--pp-subtest (node)
   (gotest-transient--insert-indented (upcase (gotest-transient--node-status node)) 1)
-  (insert " - ")
-  (insert (gotest-transient--node-package node))
   (insert " - ")
   (insert (gotest-transient--node-test node))
   (insert "/")
