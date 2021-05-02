@@ -1,7 +1,5 @@
 package other
 
-import "fmt"
-
 func other() {
-	fmt.Println("Doing something here!")
+	panic("something has gone very wrong")
 }

@@ -141,14 +141,14 @@
           (insert "The go test command has finished.")
           (insert "\n====================================\n"))
          ((s-prefix-p "exited abnormally" event)
-          (insert "\n====================================\n")
+          (insert "\n===================================================\n")
           (insert "The go test command has finished with some errors.")
-          (insert "\n====================================\n"))
+          (insert "\n===================================================\n"))
          (t
-          (insert "\n====================================\n")
+          (insert "\n=================================================================\n")
           (insert "The go test command has finished with an abnormal status: ")
           (insert event)
-          (insert "\n====================================\n"))))))
+          (insert "\n=================================================================\n"))))))
   (kill-buffer (process-buffer proc))
   (select-window (get-buffer-window gotest-transient--results-buffer)))
 
@@ -230,7 +230,7 @@
          (node (gotest-transient--find-node package-name test-name subtest-name))
          (node-data (ewoc-data node))
          (node-output (gotest-transient--node-output node-data)))
-    (setf (gotest-transient--node-output node-data) (add-to-list 'node-output output-text))
+    (setf (gotest-transient--node-output node-data) (add-to-list 'node-output output-text t))
     (ewoc-invalidate gotest-transient--results-ewoc node)))
 
 (defun gotest-transient--update-status (event)
@@ -341,11 +341,16 @@
   "Face for displaying the status of a failed test."
   :group 'gotest-transient)
 
+(defface gotest--file-face '((t :foreground "white" :weight bold))
+  "Face for displaying file names on failed tests."
+  :group 'gotest-transient)
+
 (defconst gotest-font-lock-keywords
   '(("error\\:" . 'gotest--fail-face)
     ("FAIL" . 'gotest--fail-face)
     ("FAIL" . 'gotest--fail-face)
-    ("PASS" . 'gotest--pass-face))
+    ("PASS" . 'gotest--pass-face)
+    ("\\([^ \t]+\\.go:[0-9]+\\)" . 'gotest--file-face))
   "Minimal highlighting expressions for go test results.")
 
 (defun gotest-transient--run-file (&optional args)
