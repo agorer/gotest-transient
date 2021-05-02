@@ -453,7 +453,8 @@
          (package (gotest-transient--node-package (ewoc-data current-node)))
          (test-folder (gotest-transient--get-package-folder package))
          (error-file (gotest-transient--get-error-file current-node))
-         (full-path (concat test-folder "/" (gotest-transient--file-name error-file))))
+         (full-path
+          (gotest-transient--full-path test-folder (gotest-transient--file-name error-file))))
     (find-file-other-window full-path)
     (goto-line (gotest-transient--file-line error-file))))
 
@@ -462,6 +463,11 @@
 
 (defun gotest-transient--file-line (file-string)
   (string-to-number (car (cdr (split-string file-string ":")))))
+
+(defun gotest-transient--full-path (folder file-name)
+  (if (string-prefix-p "/" file-name)
+      file-name
+    (concat folder "/" file-name)))
 
 (defun gotest-transient--get-package-folder (package)
     (let* ((base-module (gotest-transient--get-base-module gotest-transient--project-root))
@@ -483,16 +489,22 @@
 
 (defun gotest-transient--get-error-file (node)
   (let* ((output (gotest-transient--node-output (ewoc-data node)))
-         (error-file-line (car (seq-filter 'gotest-transient--error-file-name-p output)))
-         (regex "\\([^ \t]+\\.go:[0-9]+\\)"))
-    (when (not error-file-line)
-      (error "No error file found on test output"))
-    (if (string-match regex error-file-line)
-        (match-string-no-properties 1 error-file-line)
-      (error "No error file found on test output."))))
+         (error-file-lines (seq-filter 'gotest-transient--error-file-name-p output)))
+    (message "%s" error-file-lines)
+    (cond ((not error-file-lines)
+           (error "No error file found on test output"))
+          ((equal (length error-file-lines) 1)
+           (gotest-transient--get-error-name (car error-file-lines)))
+          (t
+           (completing-read "Select file: "
+                            (mapcar 'gotest-transient--get-error-name error-file-lines))))))
+
+(defun gotest-transient--get-error-name (line)
+  (let ((regex "\\([^ \t]+\\.go:[0-9]+\\)"))
+    (string-match regex line)
+    (match-string-no-properties 1 line)))
 
 (defun gotest-transient--error-file-name-p (line)
-  (message line)
-  (string-match-p "\\.go:[0-9]+:" line))
+  (string-match-p "\\.go:[0-9]+" line))
   
 (provide 'gotest-transient)
