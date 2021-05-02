@@ -56,12 +56,14 @@
 
 (setq gotest-transient--results-buffer nil)
 (setq gotest-transient--results-ewoc nil)
+(setq gotest-transient--project-root nil)
 (defun gotest-transient--run-tests (project-root cmd-args)
   "Run the command line with CMDARGS and show results on buffer."
   (let ((cmdline (append '("go" "test" "-json") cmd-args)))
     (setq gotest-transient--results-buffer (get-buffer-create "*Go test*"))
     (display-buffer gotest-transient--results-buffer)
     (setq gotest-transient--previous-cmd-args cmd-args)
+    (setq gotest-transient--project-root project-root)
 
     (with-current-buffer gotest-transient--results-buffer
       (let ((buffer-read-only nil))
@@ -242,7 +244,7 @@
     (setf (gotest-transient--node-status node-data) status)
     (ewoc-invalidate gotest-transient--results-ewoc node)))
 
-(defun gotest-transient--toggle-node ()
+(defun gotest-transient-toggle-node ()
   (interactive)
   (let* ((node (ewoc-locate gotest-transient--results-ewoc))
          (node-data (ewoc-data node))
@@ -250,7 +252,7 @@
     (setf (gotest-transient--node-expanded node-data) (not expanded))
     (ewoc-invalidate gotest-transient--results-ewoc node)))
 
-(defun gotest-transient--goto-next-error ()
+(defun gotest-transient-goto-next-error ()
   (interactive)
   (let ((current-node (ewoc-locate gotest-transient--results-ewoc)))
     (when current-node
@@ -326,8 +328,9 @@
     ;; key bindings go here
     (define-key m (kbd "k") 'kill-buffer)
     (define-key m (kbd "q") 'quit-window)
-    (define-key m (kbd "TAB") 'gotest-transient--toggle-node)
-    (define-key m [(f2)] 'gotest-transient--goto-next-error)
+    (define-key m (kbd "TAB") 'gotest-transient-toggle-node)
+    (define-key m (kbd "RET") 'gotest-transient-goto-error)
+    (define-key m [(f2)] 'gotest-transient-goto-next-error)
     m))
 
 (defface gotest--pass-face '((t :foreground "green"))
@@ -437,5 +440,54 @@
     (if (bound-and-true-p gotest-transient--previous-cmd-args)
         (gotest-transient--run-tests project-root gotest-transient--previous-cmd-args)
       (message "No tests were run previously"))))
+
+(defun gotest-transient-goto-error ()
+  "Open / goto buffer where the error in cursor is located."
+  (interactive)
+  (let* ((current-node (ewoc-locate gotest-transient--results-ewoc))
+         (package (gotest-transient--node-package (ewoc-data current-node)))
+         (test-folder (gotest-transient--get-package-folder package))
+         (error-file (gotest-transient--get-error-file current-node))
+         (full-path (concat test-folder "/" (gotest-transient--file-name error-file))))
+    (find-file-other-window full-path)
+    (goto-line (gotest-transient--file-line error-file))))
+
+(defun gotest-transient--file-name (file-string)
+  (car (split-string file-string ":")))
+
+(defun gotest-transient--file-line (file-string)
+  (string-to-number (car (cdr (split-string file-string ":")))))
+
+(defun gotest-transient--get-package-folder (package)
+    (let* ((base-module (gotest-transient--get-base-module gotest-transient--project-root))
+           (relative-folder (string-remove-prefix base-module package)))
+      (concat (string-remove-suffix "/" gotest-transient--project-root) relative-folder)))
+
+(defun gotest-transient--get-base-module (project-root)
+  "Gets the base module of the project from go-mod"
+  (let ((gomod-buffer (find-file-noselect (concat project-root "/go.mod")))
+        (regex "^module \\([^\n]+\\)")
+        (base-module nil))
+    (with-current-buffer gomod-buffer
+      (if (search-forward-regexp regex nil t)
+          (setq base-module (match-string-no-properties 1))
+        (error "No base module found on go.mod"))
+      (set-buffer-modified-p nil)
+      (kill-buffer (current-buffer))
+      base-module)))
+
+(defun gotest-transient--get-error-file (node)
+  (let* ((output (gotest-transient--node-output (ewoc-data node)))
+         (error-file-line (car (seq-filter 'gotest-transient--error-file-name-p output)))
+         (regex "\\([^ \t]+\\.go:[0-9]+\\)"))
+    (when (not error-file-line)
+      (error "No error file found on test output"))
+    (if (string-match regex error-file-line)
+        (match-string-no-properties 1 error-file-line)
+      (error "No error file found on test output."))))
+
+(defun gotest-transient--error-file-name-p (line)
+  (message line)
+  (string-match-p "\\.go:[0-9]+:" line))
   
 (provide 'gotest-transient)
