@@ -265,6 +265,19 @@
     (when current-node
       (ewoc-goto-node gotest-transient--results-ewoc current-node))))
 
+(defun gotest-transient-goto-prev-error ()
+  (interactive)
+  (let ((current-node (ewoc-locate gotest-transient--results-ewoc)))
+    (when current-node
+      (setq current-node (ewoc-prev gotest-transient--results-ewoc current-node)))
+
+    (while (when (not (equal current-node nil))
+             (not (equal (gotest-transient--node-status (ewoc-data current-node)) "fail")))
+      (setq current-node (ewoc-prev gotest-transient--results-ewoc current-node)))
+
+    (when current-node
+      (ewoc-goto-node gotest-transient--results-ewoc current-node))))
+
 (defun gotest-transient--pp-node (node)
   (if (gotest-transient--node-subtest node)
       (gotest-transient--pp-subtest node)
@@ -327,6 +340,7 @@
     (define-key m (kbd "TAB") 'gotest-transient-toggle-node)
     (define-key m (kbd "RET") 'gotest-transient-goto-error)
     (define-key m [(f2)] 'gotest-transient-goto-next-error)
+    (define-key m [(S-f2)] 'gotest-transient-goto-prev-error)
     m))
 
 (defface gotest--pass-face '((t :foreground "green"))
