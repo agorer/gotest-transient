@@ -5,7 +5,7 @@
   :group 'go
   :prefix "gotest-transient-")
 
-(cl-defstruct (gotest-transient--node (:constructor gotest-transient--node-create))
+(cl-defstruct (gtt--node (:constructor gtt--node-create))
   package
   test
   subtest
@@ -14,7 +14,7 @@
   elapsed
   expanded)
 
-(define-transient-command gotest-transient-dispatch ()
+(define-transient-command gtt-dispatch ()
   "Show popup for running go tests."
   :value '("")
   ["Options"
@@ -22,20 +22,20 @@
     (gotest-transient:-t)
     ("-f" "fail fast" "-failfast")]]
   ["Run tests"
-   [("p" "all project" gotest-transient--run-project)]
-   [("f" "current file" gotest-transient--run-file)]
-   [("tt" "current test" gotest-transient--run-test)]
-   [("tr" "current subtest" gotest-transient--run-subtest)]])
+   [("p" "all project" gtt--run-project)]
+   [("f" "current file" gtt--run-file)]
+   [("tt" "current test" gtt--run-test)]
+   [("tr" "current subtest" gtt--run-subtest)]])
 
-(defun gotest-transient--run-project (&optional args)
+(defun gtt--run-project (&optional args)
   "Run all tests for the current project."
-  (interactive (list (transient-args 'gotest-transient-dispatch)))
+  (interactive (list (transient-args 'gtt-dispatch)))
   (transient-save)
-  (let ((project-root (gotest-transient--get-project-root))
+  (let ((project-root (gtt--get-project-root))
         (cmd-args (append args '("./..."))))
-    (gotest-transient--run-tests project-root cmd-args)))
+    (gtt--run-tests project-root cmd-args)))
 
-(defun gotest-transient--read-quoted-argument-for-short-flag (prompt initial-input history)
+(defun gtt--read-quoted-argument-for-short-flag (prompt initial-input history)
   "Read a quoted string for use as a argument after a short-form command line flag."
   (let* ((input (read-from-minibuffer prompt initial-input nil nil history))
          (quoted-input input)
@@ -48,56 +48,56 @@
   :argument "-tags"
   :allow-empty nil
   :key "-t"
-  :reader 'gotest-transient--read-quoted-argument-for-short-flag)
+  :reader 'gtt--read-quoted-argument-for-short-flag)
 
-(defun gotest-transient--get-project-root ()
+(defun gtt--get-project-root ()
   "Return the root directory of the project (the one that contains go.mod)."
   (locate-dominating-file (buffer-file-name) "go.mod"))
 
-(setq gotest-transient--results-buffer nil)
-(setq gotest-transient--results-ewoc nil)
-(setq gotest-transient--project-root nil)
-(defun gotest-transient--run-tests (project-root cmd-args)
+(setq gtt--results-buffer nil)
+(setq gtt--results-ewoc nil)
+(setq gtt--project-root nil)
+(defun gtt--run-tests (project-root cmd-args)
   "Run the command line with CMDARGS and show results on buffer."
   (let ((cmdline (append '("go" "test" "-json") cmd-args)))
-    (setq gotest-transient--results-buffer (get-buffer-create "*Go test*"))
-    (display-buffer gotest-transient--results-buffer)
-    (setq gotest-transient--previous-cmd-args cmd-args)
-    (setq gotest-transient--project-root project-root)
+    (setq gtt--results-buffer (get-buffer-create "*Go test*"))
+    (display-buffer gtt--results-buffer)
+    (setq gtt--previous-cmd-args cmd-args)
+    (setq gtt--project-root project-root)
 
-    (with-current-buffer gotest-transient--results-buffer
+    (with-current-buffer gtt--results-buffer
       (let ((buffer-read-only nil))
         (erase-buffer))
       (buffer-disable-undo)
       (gotest-mode)
 
-      (setq gotest-transient--results-ewoc (ewoc-create #'gotest-transient--pp-node nil nil t))
+      (setq gtt--results-ewoc (ewoc-create #'gtt--pp-node nil nil t))
       
       (let ((default-directory project-root))
-        (setq gotest-transient--stderr-buffer (generate-new-buffer "*Go test tmp (stderr)*"))
-        (setq gotest-transient--stderr-process
+        (setq gtt--stderr-buffer (generate-new-buffer "*Go test tmp (stderr)*"))
+        (setq gtt--stderr-process
               (make-pipe-process :name "*Go test (stderr)*"
-                                 :buffer gotest-transient--stderr-buffer
-                                 :sentinel #'gotest-transient--stderr-sentinel
-                                 :filter #'gotest-transient--read-stderr))
+                                 :buffer gtt--stderr-buffer
+                                 :sentinel #'gtt--stderr-sentinel
+                                 :filter #'gtt--read-stderr))
 
-        (setq gotest-transient--process-buffer (generate-new-buffer "*Go test tmp*"))
-        (setq gotest-transient--process
+        (setq gtt--process-buffer (generate-new-buffer "*Go test tmp*"))
+        (setq gtt--process
               (make-process :name "*Go test (stdout)*"
-                            :buffer gotest-transient--process-buffer
-                            :sentinel #'gotest-transient--process-sentinel
-                            :filter (gotest-transient--process-filter-line-buffer
-                                     #'gotest-transient--read-stdout)
-                            :stderr gotest-transient--stderr-process
+                            :buffer gtt--process-buffer
+                            :sentinel #'gtt--process-sentinel
+                            :filter (gtt--process-filter-line-buffer
+                                     #'gtt--read-stdout)
+                            :stderr gtt--stderr-process
                             :command cmdline))))))
 
-(defun gotest-transient--stderr-sentinel (proc event)
+(defun gtt--stderr-sentinel (proc event)
   "Acts as the process sentinel for stderr proccess (ignoring all events)."
   (kill-buffer (process-buffer proc)))
 
 (defconst NEWLINE (string-to-char "\n"))
 
-(defun gotest-transient--string-indexof (string char start)
+(defun gtt--string-indexof (string char start)
   "Return the index of CHAR within STRING from START."
   (let ((i start)
         (index nil))
@@ -107,32 +107,32 @@
       (setq i (1+ i)))
     index))
 
-(setq gotest-transient--buffer-string nil)
-(defun gotest-transient--process-filter-line-buffer (real-filter)
+(setq gtt--buffer-string nil)
+(defun gtt--process-filter-line-buffer (real-filter)
   "Creates a process filter function that is called for lines instead of when flushing."
-  (setq gotest-transient--buffer-string "")
+  (setq gtt--buffer-string "")
   `(lambda (proc string)
-     (setq string (concat gotest-transient--buffer-string string))
+     (setq string (concat gtt--buffer-string string))
      (let ((start 0) new-start)
-       (while (setf new-start (gotest-transient--string-indexof string NEWLINE start))
+       (while (setf new-start (gtt--string-indexof string NEWLINE start))
          ;;does not include newline
          (,real-filter proc (substring string start new-start))
          (setf start (1+ new-start))) ;;past newline
          
-       (setq gotest-transient--buffer-string (substring string start)))))
+       (setq gtt--buffer-string (substring string start)))))
 
-(defun gotest-transient--read-stderr (proc line)
+(defun gtt--read-stderr (proc line)
   "Filters the stderr output from the go compiler."
   (let ((inhibit-quit t))
     (with-local-quit
-      (with-current-buffer gotest-transient--results-buffer
+      (with-current-buffer gtt--results-buffer
         (let ((buffer-read-only nil))
           (insert line))))))
   
-(defun gotest-transient--process-sentinel (proc event)
+(defun gtt--process-sentinel (proc event)
   "Acts as the process sentinel for the run process."
   (with-local-quit
-    (with-current-buffer gotest-transient--results-buffer
+    (with-current-buffer gtt--results-buffer
       (let ((buffer-read-only nil))
         (end-of-buffer)
         (cond
@@ -150,70 +150,70 @@
           (insert event)
           (insert "\n=================================================================\n"))))))
   (kill-buffer (process-buffer proc))
-  (select-window (get-buffer-window gotest-transient--results-buffer)))
+  (select-window (get-buffer-window gtt--results-buffer)))
 
-(defun gotest-transient--read-stdout (proc input)
+(defun gtt--read-stdout (proc input)
   "Filters the stderr output from the go compiler."
   (let ((inhibit-quit t)
         (event (json-parse-string input)))
     (with-local-quit
-      (with-current-buffer gotest-transient--results-buffer
-        (when (gotest-transient--is-not-package-event event)
-          (cond ((gotest-transient--is-run-event event)
-                 (gotest-transient--create-node event))
-                ((gotest-transient--is-output-event event)
-                 (gotest-transient--add-output event))
-                ((gotest-transient--is-result-event event)
-                 (gotest-transient--update-status event))))))))
+      (with-current-buffer gtt--results-buffer
+        (when (gtt--is-not-package-event event)
+          (cond ((gtt--is-run-event event)
+                 (gtt--create-node event))
+                ((gtt--is-output-event event)
+                 (gtt--add-output event))
+                ((gtt--is-result-event event)
+                 (gtt--update-status event))))))))
  
-(defun gotest-transient--event-action (event)
+(defun gtt--event-action (event)
   (gethash "Action" event))
 
-(defun gotest-transient--is-run-event (event)
-  (equal "run" (gotest-transient--event-action event)))
+(defun gtt--is-run-event (event)
+  (equal "run" (gtt--event-action event)))
 
-(defun gotest-transient--is-output-event (event)
-  (equal "output" (gotest-transient--event-action event)))
+(defun gtt--is-output-event (event)
+  (equal "output" (gtt--event-action event)))
 
-(defun gotest-transient--is-result-event (event)
-  (let ((action (gotest-transient--event-action event)))
+(defun gtt--is-result-event (event)
+  (let ((action (gtt--event-action event)))
     (or (equal "fail" action) (equal "pass" action))))
 
-(defun gotest-transient--is-not-package-event (event)
+(defun gtt--is-not-package-event (event)
   (not (equal (gethash "Test" event) nil)))
 
-(defun gotest-transient--event-package (event)
+(defun gtt--event-package (event)
   (gethash "Package" event))
 
-(defun gotest-transient--event-test (event)
+(defun gtt--event-test (event)
   (let ((data (gethash "Test" event)))
     (car (split-string data "/"))))
 
-(defun gotest-transient--event-subtest (event)
+(defun gtt--event-subtest (event)
   (let ((data (gethash "Test" event)))
     (car (cdr (split-string data "/")))))
 
-(defun gotest-transient--event-output (event)
+(defun gtt--event-output (event)
   (gethash "Output" event))
 
-(defun gotest-transient--event-elapsed (event)
+(defun gtt--event-elapsed (event)
   (gethash "Elapsed" event))
 
-(defun gotest-transient--find-node (package test subtest)
-  (let ((current-node (ewoc-nth gotest-transient--results-ewoc 0)))
+(defun gtt--find-node (package test subtest)
+  (let ((current-node (ewoc-nth gtt--results-ewoc 0)))
       (while (when (not (equal current-node nil))
-               (not (and (equal (gotest-transient--node-package (ewoc-data current-node)) package)
-                         (equal (gotest-transient--node-test (ewoc-data current-node)) test)
-                         (equal (gotest-transient--node-subtest (ewoc-data current-node)) subtest))))
-        (setq current-node (ewoc-next gotest-transient--results-ewoc current-node)))
+               (not (and (equal (gtt--node-package (ewoc-data current-node)) package)
+                         (equal (gtt--node-test (ewoc-data current-node)) test)
+                         (equal (gtt--node-subtest (ewoc-data current-node)) subtest))))
+        (setq current-node (ewoc-next gtt--results-ewoc current-node)))
     current-node))
 
-(defun gotest-transient--create-node (event)
-  (let* ((package-name (gotest-transient--event-package event))
-         (test-name (gotest-transient--event-test event))
-         (subtest-name (gotest-transient--event-subtest event)))
-    (ewoc-enter-last gotest-transient--results-ewoc
-                     (gotest-transient--node-create
+(defun gtt--create-node (event)
+  (let* ((package-name (gtt--event-package event))
+         (test-name (gtt--event-test event))
+         (subtest-name (gtt--event-subtest event)))
+    (ewoc-enter-last gtt--results-ewoc
+                     (gtt--node-create
                       :package package-name
                       :test test-name
                       :subtest subtest-name
@@ -222,106 +222,106 @@
                       :elapsed nil
                       :expanded nil))))
                       
-(defun gotest-transient--add-output (event)
-  (let* ((output-text (gotest-transient--event-output event))
-         (package-name (gotest-transient--event-package event))
-         (test-name (gotest-transient--event-test event))
-         (subtest-name (gotest-transient--event-subtest event))
-         (node (gotest-transient--find-node package-name test-name subtest-name))
+(defun gtt--add-output (event)
+  (let* ((output-text (gtt--event-output event))
+         (package-name (gtt--event-package event))
+         (test-name (gtt--event-test event))
+         (subtest-name (gtt--event-subtest event))
+         (node (gtt--find-node package-name test-name subtest-name))
          (node-data (ewoc-data node))
-         (node-output (gotest-transient--node-output node-data)))
-    (setf (gotest-transient--node-output node-data) (add-to-list 'node-output output-text t))
-    (ewoc-invalidate gotest-transient--results-ewoc node)))
+         (node-output (gtt--node-output node-data)))
+    (setf (gtt--node-output node-data) (add-to-list 'node-output output-text t))
+    (ewoc-invalidate gtt--results-ewoc node)))
 
-(defun gotest-transient--update-status (event)
-  (let* ((elapsed (gotest-transient--event-elapsed event))
-         (status (gotest-transient--event-action event))
-         (package-name (gotest-transient--event-package event))
-         (test-name (gotest-transient--event-test event))
-         (subtest-name (gotest-transient--event-subtest event))
-         (node (gotest-transient--find-node package-name test-name subtest-name))
+(defun gtt--update-status (event)
+  (let* ((elapsed (gtt--event-elapsed event))
+         (status (gtt--event-action event))
+         (package-name (gtt--event-package event))
+         (test-name (gtt--event-test event))
+         (subtest-name (gtt--event-subtest event))
+         (node (gtt--find-node package-name test-name subtest-name))
          (node-data (ewoc-data node)))
-    (setf (gotest-transient--node-status node-data) status)
-    (ewoc-invalidate gotest-transient--results-ewoc node)))
+    (setf (gtt--node-status node-data) status)
+    (ewoc-invalidate gtt--results-ewoc node)))
 
-(defun gotest-transient-toggle-node ()
+(defun gtt-toggle-node ()
   (interactive)
-  (let* ((node (ewoc-locate gotest-transient--results-ewoc))
+  (let* ((node (ewoc-locate gtt--results-ewoc))
          (node-data (ewoc-data node))
-         (expanded (gotest-transient--node-expanded node-data)))
-    (setf (gotest-transient--node-expanded node-data) (not expanded))
-    (ewoc-invalidate gotest-transient--results-ewoc node)))
+         (expanded (gtt--node-expanded node-data)))
+    (setf (gtt--node-expanded node-data) (not expanded))
+    (ewoc-invalidate gtt--results-ewoc node)))
 
-(defun gotest-transient-goto-next-error ()
+(defun gtt-goto-next-error ()
   (interactive)
-  (let ((current-node (ewoc-locate gotest-transient--results-ewoc)))
+  (let ((current-node (ewoc-locate gtt--results-ewoc)))
     (when current-node
-      (setq current-node (ewoc-next gotest-transient--results-ewoc current-node)))
+      (setq current-node (ewoc-next gtt--results-ewoc current-node)))
 
     (while (when (not (equal current-node nil))
-             (not (equal (gotest-transient--node-status (ewoc-data current-node)) "fail")))
-      (setq current-node (ewoc-next gotest-transient--results-ewoc current-node)))
+             (not (equal (gtt--node-status (ewoc-data current-node)) "fail")))
+      (setq current-node (ewoc-next gtt--results-ewoc current-node)))
 
     (when current-node
-      (ewoc-goto-node gotest-transient--results-ewoc current-node))))
+      (ewoc-goto-node gtt--results-ewoc current-node))))
 
-(defun gotest-transient-goto-prev-error ()
+(defun gtt-goto-prev-error ()
   (interactive)
-  (let ((current-node (ewoc-locate gotest-transient--results-ewoc)))
+  (let ((current-node (ewoc-locate gtt--results-ewoc)))
     (when current-node
-      (setq current-node (ewoc-prev gotest-transient--results-ewoc current-node)))
+      (setq current-node (ewoc-prev gtt--results-ewoc current-node)))
 
     (while (when (not (equal current-node nil))
-             (not (equal (gotest-transient--node-status (ewoc-data current-node)) "fail")))
-      (setq current-node (ewoc-prev gotest-transient--results-ewoc current-node)))
+             (not (equal (gtt--node-status (ewoc-data current-node)) "fail")))
+      (setq current-node (ewoc-prev gtt--results-ewoc current-node)))
 
     (when current-node
-      (ewoc-goto-node gotest-transient--results-ewoc current-node))))
+      (ewoc-goto-node gtt--results-ewoc current-node))))
 
-(defun gotest-transient--pp-node (node)
-  (if (gotest-transient--node-subtest node)
-      (gotest-transient--pp-subtest node)
-    (gotest-transient--pp-test node)))
+(defun gtt--pp-node (node)
+  (if (gtt--node-subtest node)
+      (gtt--pp-subtest node)
+    (gtt--pp-test node)))
 
-(defun gotest-transient--pp-test (node)
-  (insert (upcase (gotest-transient--node-status node)))
+(defun gtt--pp-test (node)
+  (insert (upcase (gtt--node-status node)))
   (insert " - ")
-  (insert (gotest-transient--node-test node))
+  (insert (gtt--node-test node))
   (insert "\n")
-  (when (gotest-transient--node-expanded node)
-    (gotest-transient--pp-output node)))
+  (when (gtt--node-expanded node)
+    (gtt--pp-output node)))
         
-(defun gotest-transient--pp-subtest (node)
-  (gotest-transient--insert-indented (upcase (gotest-transient--node-status node)) 1)
+(defun gtt--pp-subtest (node)
+  (gtt--insert-indented (upcase (gtt--node-status node)) 1)
   (insert " - ")
-  (insert (gotest-transient--node-test node))
+  (insert (gtt--node-test node))
   (insert "/")
-  (insert (gotest-transient--node-subtest node))
+  (insert (gtt--node-subtest node))
   (insert "\n")
-  (when (gotest-transient--node-expanded node)
-    (gotest-transient--pp-output node)))
+  (when (gtt--node-expanded node)
+    (gtt--pp-output node)))
 
-(defun gotest-transient--pp-output (node)
-  (let* ((output-lines (gotest-transient--node-output node))
-         (filtered-lines (seq-filter 'gotest-transient--is-not-redundant output-lines)))
+(defun gtt--pp-output (node)
+  (let* ((output-lines (gtt--node-output node))
+         (filtered-lines (seq-filter 'gtt--is-not-redundant output-lines)))
     (if filtered-lines
         (dolist (output-line filtered-lines)
-          (gotest-transient--insert-indented output-line 2))
-      (gotest-transient--insert-indented "*** no output ***\n" 2))))
+          (gtt--insert-indented output-line 2))
+      (gtt--insert-indented "*** no output ***\n" 2))))
 
-(defun gotest-transient--is-not-redundant (line)
+(defun gtt--is-not-redundant (line)
   (not (or (string-match-p "--- PASS" line)
            (string-match-p "--- FAIL" line)
            (string-match-p "=== RUN" line))))
 
-(defun gotest-transient--insert-indented (text number-of-tabs)
+(defun gtt--insert-indented (text number-of-tabs)
   (dotimes (i number-of-tabs)
     (insert "\t"))
   (insert text))
 
 (define-derived-mode gotest-mode special-mode "gotest-mode"
   "Major mode for running go tests."
-  (use-local-map gotest-transient-mode-map)
+  (use-local-map gtt-mode-map)
   (font-lock-add-keywords nil gotest-font-lock-keywords)
   (setq truncate-lines t)
   (setq buffer-read-only t)
@@ -331,16 +331,16 @@
   (make-local-variable 'text-property-default-nonsticky)
   (push (cons 'keymap t) text-property-default-nonsticky))
 
-(defvar gotest-transient-mode-map
+(defvar gtt-mode-map
   (let ((m (make-sparse-keymap)))
     (suppress-keymap m)
     ;; key bindings go here
     (define-key m (kbd "k") 'kill-buffer)
     (define-key m (kbd "q") 'quit-window)
-    (define-key m (kbd "TAB") 'gotest-transient-toggle-node)
-    (define-key m (kbd "RET") 'gotest-transient-goto-error)
-    (define-key m [(f2)] 'gotest-transient-goto-next-error)
-    (define-key m [(S-f2)] 'gotest-transient-goto-prev-error)
+    (define-key m (kbd "TAB") 'gtt-toggle-node)
+    (define-key m (kbd "RET") 'gtt-goto-error)
+    (define-key m [(f2)] 'gtt-goto-next-error)
+    (define-key m [(S-f2)] 'gtt-goto-prev-error)
     m))
 
 (defface gotest--pass-face '((t :foreground "green"))
@@ -363,20 +363,19 @@
     ("\\([^ \t]+\\.go:[0-9]+\\)" . 'gotest--file-face))
   "Minimal highlighting expressions for go test results.")
 
-(defun gotest-transient--run-file (&optional args)
+(defun gtt--run-file (&optional args)
   "Run all tests for the current file."
   (interactive
-   (list
-    (transient-args 'gotest-transient-dispatch)))
+   (list (transient-args 'gtt-dispatch)))
   (transient-save)
-  (let* ((project-root (gotest-transient--get-project-root))
-         (file-tests (gotest-transient--get-current-file-tests))
+  (let* ((project-root (gtt--get-project-root))
+         (file-tests (gtt--get-current-file-tests))
          (cmd-args (append args '("-run") `(,file-tests) '("./..."))))
-    (gotest-transient--run-tests project-root cmd-args)))
+    (gtt--run-tests project-root cmd-args)))
 
-(defun gotest-transient--get-current-file-tests ()
+(defun gtt--get-current-file-tests ()
   "Get tests that should be run for the current file."
-  (let ((buffer (gotest-transient--get-test-buffer)))
+  (let ((buffer (gtt--get-test-buffer)))
     (when buffer
       (with-current-buffer buffer
 	    (save-excursion
@@ -390,7 +389,7 @@
                   (setq result (append result (list data)))))
 	          (mapconcat 'identity result "|"))))))))
 
-(defun gotest-transient--get-test-buffer ()
+(defun gtt--get-test-buffer ()
   "Get the test buffer for the FILE."
   (if (string-match "_test\.go$" buffer-file-name)
       (current-buffer)
@@ -399,20 +398,19 @@
       (when filename
 	    (find-file-noselect filename)))))
 
-(defun gotest-transient--run-test (&optional args)
+(defun gtt--run-test (&optional args)
   "Run current test"
   (interactive
-   (list
-    (transient-args 'gotest-transient-dispatch)))
+   (list (transient-args 'gtt-dispatch)))
   (transient-save)
-  (let* ((project-root (gotest-transient--get-project-root))
-         (test-name (gotest-transient--get-current-test))
+  (let* ((project-root (gtt--get-project-root))
+         (test-name (gtt--get-current-test))
          (cmd-args (append args '("-run") `(,test-name) '("./..."))))
-    (gotest-transient--run-tests project-root cmd-args)))
+    (gtt--run-tests project-root cmd-args)))
 
-(defun gotest-transient--get-current-test ()
+(defun gtt--get-current-test ()
   "Get the name of the test the cursor is on"
-  (let ((buffer (gotest-transient--get-test-buffer))
+  (let ((buffer (gtt--get-test-buffer))
         (test-function-regex "func[[:space:]]*\\(Test[^(]+\\)"))
     (with-current-buffer buffer
       (save-excursion
@@ -421,22 +419,21 @@
             (match-string-no-properties 1)
           (error "Unable to find a test"))))))
 
-(defun gotest-transient--run-subtest (&optional args)
+(defun gtt--run-subtest (&optional args)
   "Run current subtest"
   (interactive
-   (list
-    (transient-args 'gotest-transient-dispatch)))
+   (list (transient-args 'gtt-dispatch)))
   (transient-save)
-  (let* ((project-root (gotest-transient--get-project-root))
-         (test-name (gotest-transient--get-current-test))
-         (subtest-name (gotest-transient--get-current-subtest test-name))
+  (let* ((project-root (gtt--get-project-root))
+         (test-name (gtt--get-current-test))
+         (subtest-name (gtt--get-current-subtest test-name))
          (full-name (concat test-name "/" subtest-name))
          (cmd-args (append args '("-run") `(,full-name) '("./..."))))
-    (gotest-transient--run-tests project-root cmd-args)))
+    (gtt--run-tests project-root cmd-args)))
   
-(defun gotest-transient--get-current-subtest (test-name)
+(defun gtt--get-current-subtest (test-name)
   "Get the name of the subtest the cursor is on."
-  (let ((buffer (gotest-transient--get-test-buffer))
+  (let ((buffer (gtt--get-test-buffer))
         (subtest-regex "t.Run(\"\\([^\"]+\\)"))
     (with-current-buffer buffer
       (save-excursion
@@ -445,46 +442,45 @@
             (s-replace " " "_" (match-string-no-properties 1))
           (error "Unable to find a subtest"))))))
 
-(setq gotest-transient--previous-cmd-args nil)
-(defun gotest-transient-run-previous-command ()
+(setq gtt--previous-cmd-args nil)
+(defun gtt-run-previous-command ()
   "Run the last command executed if any."
   (interactive)
   
-  (message "Running command: go test %s" (s-join " " gotest-transient--previous-cmd-args))
-  (let ((project-root (gotest-transient--get-project-root)))
-    (if (bound-and-true-p gotest-transient--previous-cmd-args)
-        (gotest-transient--run-tests project-root gotest-transient--previous-cmd-args)
+  (message "Running command: go test %s" (s-join " " gtt--previous-cmd-args))
+  (let ((project-root (gtt--get-project-root)))
+    (if (bound-and-true-p gtt--previous-cmd-args)
+        (gtt--run-tests project-root gtt--previous-cmd-args)
       (message "No tests were run previously"))))
 
-(defun gotest-transient-goto-error ()
+(defun gtt-goto-error ()
   "Open / goto buffer where the error in cursor is located."
   (interactive)
-  (let* ((current-node (ewoc-locate gotest-transient--results-ewoc))
-         (package (gotest-transient--node-package (ewoc-data current-node)))
-         (test-folder (gotest-transient--get-package-folder package))
-         (error-file (gotest-transient--get-error-file current-node))
-         (full-path
-          (gotest-transient--full-path test-folder (gotest-transient--file-name error-file))))
+  (let* ((current-node (ewoc-locate gtt--results-ewoc))
+         (package (gtt--node-package (ewoc-data current-node)))
+         (test-folder (gtt--get-package-folder package))
+         (error-file (gtt--get-error-file current-node))
+         (full-path (gtt--full-path test-folder (gtt--file-name error-file))))
     (find-file-other-window full-path)
-    (goto-line (gotest-transient--file-line error-file))))
+    (goto-line (gtt--file-line error-file))))
 
-(defun gotest-transient--file-name (file-string)
+(defun gtt--file-name (file-string)
   (car (split-string file-string ":")))
 
-(defun gotest-transient--file-line (file-string)
+(defun gtt--file-line (file-string)
   (string-to-number (car (cdr (split-string file-string ":")))))
 
-(defun gotest-transient--full-path (folder file-name)
+(defun gtt--full-path (folder file-name)
   (if (string-prefix-p "/" file-name)
       file-name
     (concat folder "/" file-name)))
 
-(defun gotest-transient--get-package-folder (package)
-    (let* ((base-module (gotest-transient--get-base-module gotest-transient--project-root))
+(defun gtt--get-package-folder (package)
+    (let* ((base-module (gtt--get-base-module gtt--project-root))
            (relative-folder (string-remove-prefix base-module package)))
-      (concat (string-remove-suffix "/" gotest-transient--project-root) relative-folder)))
+      (concat (string-remove-suffix "/" gtt--project-root) relative-folder)))
 
-(defun gotest-transient--get-base-module (project-root)
+(defun gtt--get-base-module (project-root)
   "Gets the base module of the project from go-mod"
   (let ((gomod-buffer (find-file-noselect (concat project-root "/go.mod")))
         (regex "^module \\([^\n]+\\)")
@@ -497,24 +493,24 @@
       (kill-buffer (current-buffer))
       base-module)))
 
-(defun gotest-transient--get-error-file (node)
-  (let* ((output (gotest-transient--node-output (ewoc-data node)))
-         (error-file-lines (seq-filter 'gotest-transient--error-file-name-p output)))
+(defun gtt--get-error-file (node)
+  (let* ((output (gtt--node-output (ewoc-data node)))
+         (error-file-lines (seq-filter 'gtt--error-file-name-p output)))
     (message "%s" error-file-lines)
     (cond ((not error-file-lines)
            (error "No error file found on test output"))
           ((equal (length error-file-lines) 1)
-           (gotest-transient--get-error-name (car error-file-lines)))
+           (gtt--get-error-name (car error-file-lines)))
           (t
            (completing-read "Select file: "
-                            (mapcar 'gotest-transient--get-error-name error-file-lines))))))
+                            (mapcar 'gtt--get-error-name error-file-lines))))))
 
-(defun gotest-transient--get-error-name (line)
+(defun gtt--get-error-name (line)
   (let ((regex "\\([^ \t]+\\.go:[0-9]+\\)"))
     (string-match regex line)
     (match-string-no-properties 1 line)))
 
-(defun gotest-transient--error-file-name-p (line)
+(defun gtt--error-file-name-p (line)
   (string-match-p "\\.go:[0-9]+" line))
   
 (provide 'gotest-transient)
